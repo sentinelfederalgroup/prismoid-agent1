@@ -376,52 +376,31 @@ func TestDispatchCommand_RoutesModActions(t *testing.T) {
 	twitchClients := make(map[string]*twitch.Client)
 	out := make(chan []byte, 1)
 
-	cases := []struct {
-		name string
-		cmd  control.Command
-		want string
-	}{
-		{
-			name: "ban_user",
-			cmd:  control.Command{Cmd: "ban_user", BroadcasterID: "b1", TargetUserID: "t1", Reason: "rule violation"},
-			want: "ban_user (scaffold",
-		},
-		{
-			name: "unban_user",
-			cmd:  control.Command{Cmd: "unban_user", BroadcasterID: "b1", TargetUserID: "t1"},
-			want: "unban_user (scaffold",
-		},
-		{
-			name: "timeout_user",
-			cmd:  control.Command{Cmd: "timeout_user", BroadcasterID: "b1", TargetUserID: "t1", DurationSeconds: 60},
-			want: "timeout_user (scaffold",
-		},
-		{
-			name: "delete_message",
-			cmd:  control.Command{Cmd: "delete_message", BroadcasterID: "b1", MessageID: "m1"},
-			want: "delete_message (scaffold",
-		},
+	notifyCount := 0
+	notify := func(typ string, _ any) {
+		if typ == "send_chat_result" {
+			notifyCount++
+		}
+	}
+	DispatchCommand(context.Background(), control.Command{Cmd: "ban_user", BroadcasterID: "b1", TargetUserID: "t1"}, clients, twitchClients, out, notify, zerolog.Nop())
+	DispatchCommand(context.Background(), control.Command{Cmd: "timeout_user", BroadcasterID: "b1", TargetUserID: "t1", DurationSeconds: 60}, clients, twitchClients, out, notify, zerolog.Nop())
+	DispatchCommand(context.Background(), control.Command{Cmd: "delete_message", BroadcasterID: "b1", MessageID: "m1"}, clients, twitchClients, out, notify, zerolog.Nop())
+	if notifyCount != 3 {
+		t.Fatalf("expected 3 moderation result notifications, got %d", notifyCount)
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			logger, buf := bufLogger()
-			DispatchCommand(context.Background(), tc.cmd, clients, twitchClients, out, func(string, any) {}, logger)
-			if !strings.Contains(buf.String(), tc.want) {
-				t.Errorf("expected log to contain %q, got %s", tc.want, buf.String())
-			}
-		})
+	logger, buf := bufLogger()
+	DispatchCommand(context.Background(), control.Command{Cmd: "unban_user", BroadcasterID: "b1", TargetUserID: "t1"}, clients, twitchClients, out, notify, logger)
+	if !strings.Contains(buf.String(), "unban_user (scaffold") {
+		t.Errorf("expected unban scaffold log, got %s", buf.String())
 	}
 }
 
 func TestHandleBanUser_MissingTargetIgnored(t *testing.T) {
 	logger, buf := bufLogger()
-	HandleBanUser(control.Command{Cmd: "ban_user", BroadcasterID: "b1"}, logger)
+	HandleBanUser(context.Background(), control.Command{Cmd: "ban_user", BroadcasterID: "b1"}, func(string, any) {}, logger)
 	if !strings.Contains(buf.String(), "missing required field") {
 		t.Errorf("expected warn about missing field, got %s", buf.String())
-	}
-	if strings.Contains(buf.String(), "scaffold") {
-		t.Errorf("scaffold-info line should NOT fire on validation failure, got %s", buf.String())
 	}
 }
 
@@ -447,12 +426,15 @@ func TestHandleTimeoutUser_RejectsOutOfRangeDuration(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			logger, buf := bufLogger()
-			HandleTimeoutUser(control.Command{
+			HandleTimeoutUser(context.Background(), control.Command{
 				Cmd:             "timeout_user",
 				BroadcasterID:   "b1",
+				UserID:          "u1",
+				ClientID:        "cid",
+				Token:           "tok",
 				TargetUserID:    "t1",
 				DurationSeconds: tc.duration,
-			}, logger)
+			}, func(string, any) {}, logger)
 			if !strings.Contains(buf.String(), "out of range") {
 				t.Errorf("expected out-of-range warn for duration=%d, got %s", tc.duration, buf.String())
 			}
@@ -462,7 +444,7 @@ func TestHandleTimeoutUser_RejectsOutOfRangeDuration(t *testing.T) {
 
 func TestHandleTimeoutUser_MissingTargetIgnored(t *testing.T) {
 	logger, buf := bufLogger()
-	HandleTimeoutUser(control.Command{Cmd: "timeout_user", BroadcasterID: "b1", DurationSeconds: 60}, logger)
+	HandleTimeoutUser(context.Background(), control.Command{Cmd: "timeout_user", BroadcasterID: "b1", DurationSeconds: 60}, func(string, any) {}, logger)
 	if !strings.Contains(buf.String(), "missing required field") {
 		t.Errorf("expected warn about missing field, got %s", buf.String())
 	}
@@ -470,7 +452,7 @@ func TestHandleTimeoutUser_MissingTargetIgnored(t *testing.T) {
 
 func TestHandleDeleteMessage_MissingMessageIDIgnored(t *testing.T) {
 	logger, buf := bufLogger()
-	HandleDeleteMessage(control.Command{Cmd: "delete_message", BroadcasterID: "b1"}, logger)
+	HandleDeleteMessage(context.Background(), control.Command{Cmd: "delete_message", BroadcasterID: "b1"}, func(string, any) {}, logger)
 	if !strings.Contains(buf.String(), "missing required field") {
 		t.Errorf("expected warn about missing field, got %s", buf.String())
 	}

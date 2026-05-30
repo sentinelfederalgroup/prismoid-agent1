@@ -281,6 +281,16 @@ type SendChatMessageRequest struct {
 	Message       string `json:"message"`
 }
 
+type BanUserRequest struct {
+	Data BanUserRequestData `json:"data"`
+}
+
+type BanUserRequestData struct {
+	UserID   string `json:"user_id"`
+	Duration int    `json:"duration,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+}
+
 // SendChatMessageResponse is the envelope Twitch returns on 200. We surface
 // the per-send drop reason (e.g. AutoMod, channel followers-only) so the UI
 // can tell the user why a message did not appear.
@@ -316,4 +326,38 @@ func (c *HelixClient) SendChatMessage(ctx context.Context, broadcasterID, sender
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (c *HelixClient) BanUser(ctx context.Context, broadcasterID, moderatorID, targetUserID, reason string) error {
+	if broadcasterID == "" || moderatorID == "" || targetUserID == "" {
+		return errors.New("twitch helix: missing broadcaster, moderator, or target user")
+	}
+	path := fmt.Sprintf("/moderation/bans?broadcaster_id=%s&moderator_id=%s", broadcasterID, moderatorID)
+	return c.Post(ctx, path, BanUserRequest{Data: BanUserRequestData{
+		UserID: targetUserID,
+		Reason: reason,
+	}}, nil)
+}
+
+func (c *HelixClient) TimeoutUser(ctx context.Context, broadcasterID, moderatorID, targetUserID string, durationSeconds int, reason string) error {
+	if broadcasterID == "" || moderatorID == "" || targetUserID == "" {
+		return errors.New("twitch helix: missing broadcaster, moderator, or target user")
+	}
+	if durationSeconds < 1 || durationSeconds > 1209600 {
+		return fmt.Errorf("twitch helix: timeout duration out of range [1, 1209600]: %d", durationSeconds)
+	}
+	path := fmt.Sprintf("/moderation/bans?broadcaster_id=%s&moderator_id=%s", broadcasterID, moderatorID)
+	return c.Post(ctx, path, BanUserRequest{Data: BanUserRequestData{
+		UserID:   targetUserID,
+		Duration: durationSeconds,
+		Reason:   reason,
+	}}, nil)
+}
+
+func (c *HelixClient) DeleteChatMessage(ctx context.Context, broadcasterID, moderatorID, messageID string) error {
+	if broadcasterID == "" || moderatorID == "" || messageID == "" {
+		return errors.New("twitch helix: missing broadcaster, moderator, or message id")
+	}
+	path := fmt.Sprintf("/moderation/chat?broadcaster_id=%s&moderator_id=%s&message_id=%s", broadcasterID, moderatorID, messageID)
+	return c.Delete(ctx, path, nil)
 }

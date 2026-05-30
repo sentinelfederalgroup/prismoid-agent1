@@ -25,6 +25,7 @@ import {
   viewport,
   type ChatMessage,
 } from "../stores/chatStore";
+import { observeAgentMessages } from "../stores/agentStore";
 import { sendMessage, type SendMessageError } from "../lib/twitchAuth";
 import { formatSendError, toSendError } from "../lib/messageInput";
 import {
@@ -111,7 +112,11 @@ interface CachedEntry {
   measuredWidth: number;
 }
 
-const ChatFeed: Component = () => {
+export interface ChatFeedProps {
+  login: string;
+}
+
+const ChatFeed: Component<ChatFeedProps> = (props) => {
   let containerRef: HTMLDivElement | undefined;
   const entryCache = new Map<number, CachedEntry>();
   let lastBadgeRev = 0;
@@ -276,6 +281,7 @@ const ChatFeed: Component = () => {
     let unlistenBundle: (() => void) | undefined;
     listen<ChatMessage[]>("chat_messages", (event) => {
       addMessages(event.payload);
+      observeAgentMessages(event.payload, props.login);
     })
       .then((fn) => {
         unlisten = fn;

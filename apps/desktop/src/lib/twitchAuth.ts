@@ -100,3 +100,29 @@ export interface SendMessageOk {
 export function sendMessage(text: string): Promise<SendMessageOk> {
   return invoke("twitch_send_message", { text });
 }
+
+export type TwitchModerationAction = "ban" | "timeout" | "delete";
+
+export interface TwitchModerationInput {
+  action: TwitchModerationAction;
+  targetUserId?: string;
+  messageId?: string;
+  durationSeconds?: number;
+  reason?: string;
+}
+
+export interface ModerationOk {
+  ok: boolean;
+}
+
+export function runTwitchModerationAction(
+  input: TwitchModerationInput,
+): Promise<ModerationOk> {
+  return invoke("twitch_moderation_action", {
+    action: input.action,
+    targetUserId: input.targetUserId,
+    messageId: input.messageId,
+    durationSeconds: input.durationSeconds,
+    reason: input.reason,
+  });
+}

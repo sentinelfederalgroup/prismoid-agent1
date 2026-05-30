@@ -284,13 +284,13 @@ func DispatchCommand(ctx context.Context, cmd control.Command, clients map[strin
 	case "kick_disconnect":
 		HandleKickDisconnect(cmd, clients, logger)
 	case "ban_user":
-		HandleBanUser(cmd, logger)
+		HandleBanUser(ctx, cmd, notify, logger)
 	case "unban_user":
 		HandleUnbanUser(cmd, logger)
 	case "timeout_user":
-		HandleTimeoutUser(cmd, logger)
+		HandleTimeoutUser(ctx, cmd, notify, logger)
 	case "delete_message":
-		HandleDeleteMessage(cmd, logger)
+		HandleDeleteMessage(ctx, cmd, notify, logger)
 	case "send_chat_message":
 		HandleSendChatMessage(ctx, cmd, notify, logger)
 	case "youtube_send_message":
@@ -311,20 +311,31 @@ const maxTimeoutSeconds = 1209600
 // /moderation/bans with body `{data: {user_id, reason}}`) lands in a
 // follow-up PR; this scaffold exists to lock the host→sidecar protocol
 // shape before the API client is built.
-func HandleBanUser(cmd control.Command, logger zerolog.Logger) {
+func HandleBanUser(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+	reply := func(p SendChatResultPayload) {
+		p.RequestID = cmd.RequestID
+		notify("send_chat_result", p)
+	}
 	if cmd.BroadcasterID == "" || cmd.TargetUserID == "" {
 		logger.Warn().
 			Str("cmd", cmd.Cmd).
 			Str("broadcaster", cmd.BroadcasterID).
 			Str("target", cmd.TargetUserID).
 			Msg("ban_user missing required field; ignoring")
+		reply(SendChatResultPayload{ErrorMessage: "missing broadcaster or target"})
 		return
 	}
-	logger.Info().
-		Str("broadcaster", cmd.BroadcasterID).
-		Str("target", cmd.TargetUserID).
-		Str("reason", cmd.Reason).
-		Msg("ban_user (scaffold: no Helix call yet)")
+	if cmd.UserID == "" || cmd.ClientID == "" || cmd.Token == "" {
+		reply(SendChatResultPayload{ErrorMessage: "missing moderator, client_id, or token"})
+		return
+	}
+	client := &twitch.HelixClient{ClientID: cmd.ClientID, AccessToken: cmd.Token, BaseURL: sendChatHelixBase}
+	if err := client.BanUser(ctx, cmd.BroadcasterID, cmd.UserID, cmd.TargetUserID, cmd.Reason); err != nil {
+		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Str("target", cmd.TargetUserID).Msg("ban_user failed")
+		reply(SendChatResultPayload{ErrorMessage: err.Error()})
+		return
+	}
+	reply(SendChatResultPayload{Ok: true})
 }
 
 // HandleUnbanUser logs the intended unban. Helix: DELETE
@@ -348,13 +359,22 @@ func HandleUnbanUser(cmd control.Command, logger zerolog.Logger) {
 // with body `{data: {user_id, duration, reason}}`, where duration is
 // 1..1209600 seconds. Values outside that range are rejected locally to
 // match Helix semantics and surface misuse in logs.
-func HandleTimeoutUser(cmd control.Command, logger zerolog.Logger) {
+func HandleTimeoutUser(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+	reply := func(p SendChatResultPayload) {
+		p.RequestID = cmd.RequestID
+		notify("send_chat_result", p)
+	}
 	if cmd.BroadcasterID == "" || cmd.TargetUserID == "" {
 		logger.Warn().
 			Str("cmd", cmd.Cmd).
 			Str("broadcaster", cmd.BroadcasterID).
 			Str("target", cmd.TargetUserID).
 			Msg("timeout_user missing required field; ignoring")
+		reply(SendChatResultPayload{ErrorMessage: "missing broadcaster or target"})
+		return
+	}
+	if cmd.UserID == "" || cmd.ClientID == "" || cmd.Token == "" {
+		reply(SendChatResultPayload{ErrorMessage: "missing moderator, client_id, or token"})
 		return
 	}
 	if cmd.DurationSeconds < 1 || cmd.DurationSeconds > maxTimeoutSeconds {
@@ -363,14 +383,16 @@ func HandleTimeoutUser(cmd control.Command, logger zerolog.Logger) {
 			Int("duration_seconds", cmd.DurationSeconds).
 			Int("max_duration_seconds", maxTimeoutSeconds).
 			Msg("timeout_user duration out of range [1, 1209600]; ignoring")
+		reply(SendChatResultPayload{ErrorMessage: "timeout duration out of range [1, 1209600]"})
 		return
 	}
-	logger.Info().
-		Str("broadcaster", cmd.BroadcasterID).
-		Str("target", cmd.TargetUserID).
-		Int("duration_seconds", cmd.DurationSeconds).
-		Str("reason", cmd.Reason).
-		Msg("timeout_user (scaffold: no Helix call yet)")
+	client := &twitch.HelixClient{ClientID: cmd.ClientID, AccessToken: cmd.Token, BaseURL: sendChatHelixBase}
+	if err := client.TimeoutUser(ctx, cmd.BroadcasterID, cmd.UserID, cmd.TargetUserID, cmd.DurationSeconds, cmd.Reason); err != nil {
+		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Str("target", cmd.TargetUserID).Msg("timeout_user failed")
+		reply(SendChatResultPayload{ErrorMessage: err.Error()})
+		return
+	}
+	reply(SendChatResultPayload{Ok: true})
 }
 
 // HandleDeleteMessage logs the intended deletion. Helix: DELETE
@@ -378,19 +400,31 @@ func HandleTimeoutUser(cmd control.Command, logger zerolog.Logger) {
 // Message-less deletion (clear all chat) is deliberately not supported by
 // this command — a separate `clear_chat` command would handle that when
 // needed.
-func HandleDeleteMessage(cmd control.Command, logger zerolog.Logger) {
+func HandleDeleteMessage(ctx context.Context, cmd control.Command, notify twitch.Notify, logger zerolog.Logger) {
+	reply := func(p SendChatResultPayload) {
+		p.RequestID = cmd.RequestID
+		notify("send_chat_result", p)
+	}
 	if cmd.BroadcasterID == "" || cmd.MessageID == "" {
 		logger.Warn().
 			Str("cmd", cmd.Cmd).
 			Str("broadcaster", cmd.BroadcasterID).
 			Str("message_id", cmd.MessageID).
 			Msg("delete_message missing required field; ignoring")
+		reply(SendChatResultPayload{ErrorMessage: "missing broadcaster or message_id"})
 		return
 	}
-	logger.Info().
-		Str("broadcaster", cmd.BroadcasterID).
-		Str("message_id", cmd.MessageID).
-		Msg("delete_message (scaffold: no Helix call yet)")
+	if cmd.UserID == "" || cmd.ClientID == "" || cmd.Token == "" {
+		reply(SendChatResultPayload{ErrorMessage: "missing moderator, client_id, or token"})
+		return
+	}
+	client := &twitch.HelixClient{ClientID: cmd.ClientID, AccessToken: cmd.Token, BaseURL: sendChatHelixBase}
+	if err := client.DeleteChatMessage(ctx, cmd.BroadcasterID, cmd.UserID, cmd.MessageID); err != nil {
+		logger.Warn().Err(err).Str("broadcaster", cmd.BroadcasterID).Str("message_id", cmd.MessageID).Msg("delete_message failed")
+		reply(SendChatResultPayload{ErrorMessage: err.Error()})
+		return
+	}
+	reply(SendChatResultPayload{Ok: true})
 }
 
 // SendChatResultPayload is the body of a `send_chat_result` notification

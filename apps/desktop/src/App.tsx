@@ -1,4 +1,5 @@
 import { Component, Match, Switch, createSignal, onMount } from "solid-js";
+import AgentPanel from "./components/AgentPanel";
 import ChatFeed from "./components/ChatFeed";
 import Header from "./components/Header";
 import MessageInput from "./components/MessageInput";
@@ -54,8 +55,26 @@ const App: Component = () => {
           {(loggedIn) => (
             <>
               <Header login={loggedIn().login} />
-              <ChatFeed />
-              <MessageInput login={loggedIn().login} />
+              <main
+                style={{
+                  display: "flex",
+                  flex: 1,
+                  "min-height": 0,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    "flex-direction": "column",
+                    flex: 1,
+                    "min-width": 0,
+                  }}
+                >
+                  <ChatFeed login={loggedIn().login} />
+                  <MessageInput login={loggedIn().login} />
+                </div>
+                <AgentPanel />
+              </main>
             </>
           )}
         </Match>

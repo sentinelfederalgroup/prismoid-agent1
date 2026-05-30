@@ -53,3 +53,20 @@ Click a username to open a user card:
 - Quick-action buttons: timeout (with duration presets), ban, delete all messages from this user
 
 User card data is fetched on demand from the platform API via Go, with a short cache (5 min) to avoid redundant calls when clicking the same user repeatedly.
+
+## Streamer Agent
+
+The desktop UI includes a local co-mod panel that watches the same unified message stream as the chat feed. The first implementation is deterministic and runs entirely in the frontend so it works without an external AI key:
+
+- risky-message triage with severity, reasons, and suggested action
+- local policy checks for repeated-message spam, rapid same-user bursts, risky links, and direct harm language
+- question queue for streamer follow-up
+- suggested replies for common live moments
+- one-minute pulse with platform counts and repeated terms
+- four panel looks: Professional, Gamify, Dark Fantasy, and Girls
+- streamer-only `!agent` commands for clearing queues, resetting state, and switching looks
+- approval-gated moderation workflow: Twitch actions can be applied from the panel after streamer approval; YouTube/Kick actions fall back to copy/manual handling until their active chat moderation state is wired into the desktop host
+
+The agent store is intentionally isolated from automatic platform mutation. It recommends actions, and the UI requires a streamer click before any moderation command runs. Twitch moderation uses Helix `moderator:manage:banned_users` and `moderator:manage:chat_messages` scopes. YouTube/Kick recommendations stay manual because the current unified `ChatMessage` model does not yet carry enough live-chat/moderator context to safely execute those platform mutations. A future provider can replace the deterministic analyzer with OpenAI, Ollama, or another model while keeping the same `AgentSnapshot` interface.
+
+Agent commands are only accepted when the message is from the signed-in streamer login or the platform marks it as broadcaster-authored. Viewer attempts are recorded in the command lock and ignored.

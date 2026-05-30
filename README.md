@@ -13,6 +13,7 @@ merges Twitch, YouTube, and Kick chat into a single window with cross-platform m
 
 - **one feed** from all platforms in a single stream
 - **mod from one place** - ban, timeout, delete regardless of source platform
+- **streamer agent** - local co-mod queue, four looks, streamer-only commands, approval-gated Twitch moderation, chat pulse, and suggested replies
 - **emotes everywhere** - 7TV, BTTV, FFZ render in all chats, including YouTube
 - **OBS overlay** - browser source for clean unified chat on stream
 - **no cloud backend** - talks directly to platform APIs from your machine

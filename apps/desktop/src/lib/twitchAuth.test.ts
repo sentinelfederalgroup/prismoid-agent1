@@ -12,12 +12,32 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 
 import {
   sendMessage,
+  runTwitchModerationAction,
   openVerificationUri,
   MAX_CHAT_MESSAGE_BYTES,
 } from "./twitchAuth";
 
 afterEach(() => {
   invokeMock.mockReset();
+});
+
+describe("runTwitchModerationAction", () => {
+  it("invokes twitch_moderation_action with camelCase payload", async () => {
+    invokeMock.mockResolvedValueOnce({ ok: true });
+    await runTwitchModerationAction({
+      action: "timeout",
+      targetUserId: "u1",
+      durationSeconds: 60,
+      reason: "spam",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("twitch_moderation_action", {
+      action: "timeout",
+      targetUserId: "u1",
+      messageId: undefined,
+      durationSeconds: 60,
+      reason: "spam",
+    });
+  });
 });
 
 describe("sendMessage", () => {

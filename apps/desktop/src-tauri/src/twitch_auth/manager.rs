@@ -100,6 +100,7 @@ impl AuthManager {
         let Some(stored) = self.store.load()? else {
             return Err(AuthError::NoTokens);
         };
+        self.ensure_required_scopes(&stored)?;
 
         if !stored.needs_refresh(Utc::now().timestamp_millis(), REFRESH_THRESHOLD_MS) {
             return Ok(stored);
@@ -146,7 +147,10 @@ impl AuthManager {
     /// Twitch. Used by the auth UI to render "Logged in as @<login>"
     /// without paying for a network round-trip on every poll.
     pub fn peek_login(&self) -> Result<Option<String>, AuthError> {
-        Ok(self.store.load()?.map(|t| t.login))
+        Ok(match self.store.load()? {
+            Some(tokens) if self.ensure_required_scopes(&tokens).is_ok() => Some(tokens.login),
+            _ => None,
+        })
     }
 
     /// Wipes the persisted token entry. Used by the logout command. The
@@ -175,6 +179,23 @@ impl AuthManager {
             .map_err(classify_refresh_error)?;
 
         tokens_from_user_token(&token)
+    }
+
+    fn ensure_required_scopes(&self, tokens: &TwitchTokens) -> Result<(), AuthError> {
+        let missing: Vec<String> = self
+            .scopes
+            .iter()
+            .map(|s| s.to_string())
+            .filter(|required| !tokens.scopes.iter().any(|granted| granted == required))
+            .collect();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(AuthError::Config(format!(
+                "stored Twitch token is missing required scopes: {}; sign in again",
+                missing.join(", ")
+            )))
+        }
     }
 }
 

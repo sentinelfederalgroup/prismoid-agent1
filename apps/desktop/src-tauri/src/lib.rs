@@ -61,6 +61,7 @@ pub fn run() {
             youtube_auth::commands::youtube_cancel_login,
             youtube_auth::commands::youtube_logout,
             sidecar_commands::twitch_send_message,
+            sidecar_commands::twitch_moderation_action,
             sidecar_commands::youtube_send_message,
         ])
         .setup(setup)
@@ -98,6 +99,8 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         AuthManager::builder(TWITCH_CLIENT_ID)
             .scope(Scope::UserReadChat)
             .scope(Scope::UserWriteChat)
+            .scope(Scope::ModeratorManageBannedUsers)
+            .scope(Scope::ModeratorManageChatMessages)
             .build(KeychainStore, http_client),
     );
     let wakeup = Arc::new(Notify::new());

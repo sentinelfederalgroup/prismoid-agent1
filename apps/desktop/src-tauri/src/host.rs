@@ -277,6 +277,56 @@ pub fn build_youtube_send_message_line(
     Ok(bytes)
 }
 
+pub struct TwitchModerationArgs<'a> {
+    pub cmd: &'a str,
+    pub client_id: &'a str,
+    pub access_token: &'a str,
+    pub broadcaster_id: &'a str,
+    pub moderator_id: &'a str,
+    pub target_user_id: Option<&'a str>,
+    pub message_id: Option<&'a str>,
+    pub duration_seconds: Option<i32>,
+    pub reason: Option<&'a str>,
+    pub request_id: u64,
+}
+
+pub fn build_twitch_moderation_line(
+    args: TwitchModerationArgs<'_>,
+) -> serde_json::Result<Vec<u8>> {
+    #[derive(Serialize)]
+    struct ModCmd<'a> {
+        cmd: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+        broadcaster_id: &'a str,
+        user_id: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        target_user_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message_id: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration_seconds: Option<i32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<&'a str>,
+        request_id: u64,
+    }
+    let cmd = ModCmd {
+        cmd: args.cmd,
+        client_id: args.client_id,
+        token: args.access_token,
+        broadcaster_id: args.broadcaster_id,
+        user_id: args.moderator_id,
+        target_user_id: args.target_user_id,
+        message_id: args.message_id,
+        duration_seconds: args.duration_seconds,
+        reason: args.reason,
+        request_id: args.request_id,
+    };
+    let mut bytes = serde_json::to_vec(&cmd)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Serializes a `token_refresh` control command line for the sidecar.
 /// The sidecar updates the access token on all running Twitch clients
 /// so the next EventSub reconnect uses a fresh credential.
@@ -868,5 +918,34 @@ mod tests {
         assert_eq!(parsed["live_chat_id"], "Cg0KC0xpdmVfQ2hhdF9JZA==");
         assert_eq!(parsed["message"], "hello yt");
         assert_eq!(parsed["request_id"], 17);
+    }
+
+    #[test]
+    fn build_twitch_moderation_line_serializes_timeout() {
+        let line = build_twitch_moderation_line(TwitchModerationArgs {
+            cmd: "timeout_user",
+            client_id: "cid",
+            access_token: "tok",
+            broadcaster_id: "b",
+            moderator_id: "m",
+            target_user_id: Some("u"),
+            message_id: None,
+            duration_seconds: Some(60),
+            reason: Some("spam"),
+            request_id: 44,
+        })
+        .unwrap();
+        assert_eq!(line.last(), Some(&b'\n'));
+        let parsed: serde_json::Value = serde_json::from_slice(&line[..line.len() - 1]).unwrap();
+        assert_eq!(parsed["cmd"], "timeout_user");
+        assert_eq!(parsed["client_id"], "cid");
+        assert_eq!(parsed["token"], "tok");
+        assert_eq!(parsed["broadcaster_id"], "b");
+        assert_eq!(parsed["user_id"], "m");
+        assert_eq!(parsed["target_user_id"], "u");
+        assert_eq!(parsed["duration_seconds"], 60);
+        assert_eq!(parsed["reason"], "spam");
+        assert_eq!(parsed["request_id"], 44);
+        assert!(parsed.get("message_id").is_none());
     }
 }

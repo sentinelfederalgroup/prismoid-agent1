@@ -26,8 +26,8 @@ use tokio::sync::oneshot;
 use tauri_plugin_shell::process::CommandChild;
 
 use crate::host::{
-    build_send_chat_message_line, build_youtube_send_message_line, SendChatMessageArgs,
-    SendChatResult, YouTubeSendMessageArgs,
+    build_send_chat_message_line, build_twitch_moderation_line, build_youtube_send_message_line,
+    SendChatMessageArgs, SendChatResult, TwitchModerationArgs, YouTubeSendMessageArgs,
 };
 use crate::twitch_auth::{AuthError, AuthState, TWITCH_CLIENT_ID};
 use crate::youtube_auth::{AuthError as YouTubeAuthError, AuthState as YouTubeAuthState};
@@ -350,6 +350,19 @@ pub struct SendChatOk {
     pub message_id: String,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TwitchModerationAction {
+    Ban,
+    Timeout,
+    Delete,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ModerationOk {
+    pub ok: bool,
+}
+
 /// Maximum chat message length accepted by Twitch Helix POST
 /// /chat/messages. Mirrored on the Rust side so we reject oversized
 /// payloads before they cross the IPC boundary.
@@ -467,6 +480,87 @@ pub async fn youtube_send_message(
 
     let result = rx.await.map_err(|_| SendCommandError::SidecarNotRunning)?;
     SendCommandError::from_youtube_send_result(result)
+}
+
+#[tauri::command]
+pub async fn twitch_moderation_action(
+    auth: State<'_, AuthState>,
+    sender: State<'_, SidecarCommandSender>,
+    action: TwitchModerationAction,
+    target_user_id: Option<String>,
+    message_id: Option<String>,
+    duration_seconds: Option<i32>,
+    reason: Option<String>,
+) -> Result<ModerationOk, SendCommandError> {
+    let tokens = auth
+        .manager
+        .load_or_refresh()
+        .await
+        .map_err(SendCommandError::auth)?;
+
+    let cmd = match action {
+        TwitchModerationAction::Ban => {
+            if target_user_id.as_deref().unwrap_or("").trim().is_empty() {
+                return Err(SendCommandError::Json {
+                    message: "ban requires target_user_id".into(),
+                });
+            }
+            "ban_user"
+        }
+        TwitchModerationAction::Timeout => {
+            if target_user_id.as_deref().unwrap_or("").trim().is_empty() {
+                return Err(SendCommandError::Json {
+                    message: "timeout requires target_user_id".into(),
+                });
+            }
+            let duration = duration_seconds.unwrap_or(60);
+            if !(1..=1_209_600).contains(&duration) {
+                return Err(SendCommandError::Json {
+                    message: "timeout duration out of range [1, 1209600]".into(),
+                });
+            }
+            "timeout_user"
+        }
+        TwitchModerationAction::Delete => {
+            if message_id.as_deref().unwrap_or("").trim().is_empty() {
+                return Err(SendCommandError::Json {
+                    message: "delete requires message_id".into(),
+                });
+            }
+            "delete_message"
+        }
+    };
+
+    let (tx, rx) = oneshot::channel();
+    let reason = reason.unwrap_or_else(|| "Prismoid streamer agent".to_string());
+    sender.send_with_pending(tx, |request_id| {
+        build_twitch_moderation_line(TwitchModerationArgs {
+            cmd,
+            client_id: TWITCH_CLIENT_ID,
+            access_token: &tokens.access_token,
+            broadcaster_id: &tokens.user_id,
+            moderator_id: &tokens.user_id,
+            target_user_id: target_user_id.as_deref(),
+            message_id: message_id.as_deref(),
+            duration_seconds,
+            reason: Some(&reason),
+            request_id,
+        })
+    })?;
+
+    let result = rx.await.map_err(|_| SendCommandError::SidecarNotRunning)?;
+    if result.ok {
+        Ok(ModerationOk { ok: true })
+    } else {
+        Err(SendCommandError::Helix {
+            code: result.drop_code,
+            message: if result.error_message.is_empty() {
+                result.drop_message
+            } else {
+                result.error_message
+            },
+        })
+    }
 }
 
 #[cfg(test)]

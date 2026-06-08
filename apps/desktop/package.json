@@ -17,25 +17,25 @@
     "prepare": "test -d .git && lefthook install --force || echo 'skipping lefthook (not a git repo)'"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.6",
+    "@chenglou/pretext": "^0.0.7",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
-    "solid-js": "^1.9.12"
+    "solid-js": "^1.9.13"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.5.2",
-    "@commitlint/config-conventional": "^20.5.0",
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
     "@eslint/js": "^10.0.1",
     "@tauri-apps/cli": "^2.11.2",
-    "@vitest/coverage-v8": "^4.1.5",
-    "eslint": "^10.2.1",
-    "jsdom": "^29.1.0",
-    "lefthook": "^2.1.6",
+    "@vitest/coverage-v8": "^4.1.8",
+    "eslint": "^10.4.1",
+    "jsdom": "^29.1.1",
+    "lefthook": "^2.1.9",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.1",
-    "vite": "^8.0.10",
+    "typescript-eslint": "^8.60.1",
+    "vite": "^8.0.16",
     "vite-plugin-solid": "^2.11.12",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.8"
   }
 }

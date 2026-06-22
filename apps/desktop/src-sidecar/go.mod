@@ -3,7 +3,7 @@ module github.com/ImpulseB23/Prismoid/sidecar
 go 1.26
 
 require (
-	github.com/coder/websocket v1.8.14
+	github.com/coder/websocket v1.8.15
 	github.com/rs/zerolog v1.35.1
 	golang.org/x/sys v0.46.0
 	google.golang.org/grpc v1.81.1

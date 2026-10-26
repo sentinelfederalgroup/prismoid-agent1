@@ -41,7 +41,7 @@ url = "2"
 
 [dev-dependencies]
 criterion = "0.8"
-httpmock = "0.8"
+httpmock = "0.9"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", "test-util"] }
 
 [target.'cfg(windows)'.dependencies]
